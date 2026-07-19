@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Square Game</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: white; overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  #game { position: relative; width: 100%; height: 100%; }
+  #square { position: absolute; width: 40px; height: 40px; background: black; top: 0; left: 0; z-index: 5; }
+  .circle { position: absolute; width: 16px; height: 16px; background: #f6d000; border-radius: 50%; z-index: 2; }
+  .triangle { position: absolute; width: 30px; height: 30px; z-index: 3; }
+  .triangle-shape { width: 100%; height: 100%; background: #7b2fd6; clip-path: polygon(50% 0%, 0% 100%, 100% 100%); }
+  .laser { position: absolute; width: 4px; height: 18px; background: #e0264c; z-index: 4; border-radius: 2px; }
+
+  #hud { position: absolute; top: 16px; left: 20px; z-index: 10; color: #333; }
+  #hud .line { font-size: 13px; color: #888; margin-bottom: 2px; }
+  #timerLine { font-weight: 600; color: #666; }
+  #score { position: absolute; top: 16px; right: 20px; font-size: 20px; font-weight: 600; color: #222; z-index: 10; text-align: right; }
+  #coinsLine { font-size: 13px; color: #b8860b; font-weight: 600; margin-top: 2px; }
+  #laserRow { display: flex; gap: 4px; margin-top: 6px; justify-content: flex-end; }
+  .pip { width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid #e0264c; box-sizing: border-box; }
+  .pip.filled { background: #e0264c; }
+
+  #overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(255,255,255,0.96); display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    z-index: 20;
+  }
+  #overlay h1 { font-size: 36px; color: #222; margin-bottom: 8px; }
+  #overlay p { font-size: 16px; color: #555; margin-bottom: 20px; }
+  .btnRow { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  button.mainbtn {
+    padding: 12px 26px; font-size: 15px; background: #222; color: white;
+    border: none; border-radius: 6px; cursor: pointer;
+  }
+  button.mainbtn:hover { background: #444; }
+  button.mainbtn.secondary { background: white; color: #222; border: 1.5px solid #222; }
+  button.mainbtn.secondary:hover { background: #f0f0f0; }
+
+  .page { display: none; flex-direction: column; align-items: center; }
+  #upgradesPage h1 { font-size: 30px; margin-bottom: 4px; }
+  #upgradesCurrency { font-size: 15px; color: #666; margin-bottom: 24px; }
+  .upgradeCards { display: flex; gap: 20px; margin-bottom: 26px; }
+  .card {
+    width: 220px; border: 1.5px solid #ddd; border-radius: 10px; padding: 18px;
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+  }
+  .card h3 { margin: 0 0 6px 0; font-size: 16px; color: #222; }
+  .card .lvl { font-size: 13px; color: #888; margin-bottom: 10px; }
+  .card .effect { font-size: 13px; color: #555; margin-bottom: 14px; min-height: 32px; }
+  .card button {
+    padding: 8px 16px; font-size: 13px; border-radius: 6px; border: none;
+    background: #7b2fd6; color: white; cursor: pointer;
+  }
+  .card button:disabled { background: #ccc; cursor: default; }
+  .card button:not(:disabled):hover { background: #6423b3; }
+
+  #difficultyRow { display: flex; gap: 0; margin: 18px 0; border-radius: 6px; overflow: hidden; border: 1.5px solid #222; }
+  #difficultyRow button {
+    padding: 8px 18px; font-size: 13px; border: none; background: white; color: #222; cursor: pointer;
+  }
+  #difficultyRow button.active { background: #222; color: white; }
+  #difficultyNote { font-size: 12px; color: #999; max-width: 320px; text-align: center; margin-bottom: 6px; }
+  #menuCurrency { font-size: 14px; color: #666; margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div id="game">
+  <div id="hud">
+    <div class="line">Arrow keys / WASD to move · Space to fire · Esc to pause · collect yellow circles · avoid purple triangles</div>
+    <div class="line" id="timerLine">Time: <span id="timerVal">0s</span></div>
+  </div>
+  <div id="score">
+    Score: <span id="scoreVal">0</span>
+    <div id="coinsLine">Coins: <span id="coinsVal">0</span></div>
+    <div id="laserRow"></div>
+  </div>
+  <div id="square"></div>
+
+  <div id="overlay">
+    <div id="mainMenuPage" class="page">
+      <h1>Square Game</h1>
+      <div id="menuCurrency">Coins banked: <span id="menuCoins">0</span></div>
+      <div id="difficultyRow">
+        <button id="normalModeBtn">Normal</button>
+        <button id="hardModeBtn">Hard</button>
+      </div>
+      <div id="difficultyNote">Hard mode: coins earned this run are lost on death unless spent before restarting.</div>
+      <div class="btnRow">
+        <button class="mainbtn" id="playBtn">Play</button>
+        <button class="mainbtn secondary" id="upgradesFromMenuBtn">Upgrades</button>
+      </div>
+    </div>
+
+    <div id="pausePage" class="page">
+      <h1>Paused</h1>
+      <div class="btnRow">
+        <button class="mainbtn" id="resumeBtn">Resume</button>
+        <button class="mainbtn secondary" id="upgradesFromPauseBtn">Upgrades</button>
+        <button class="mainbtn secondary" id="menuFromPauseBtn">Main Menu</button>
+      </div>
+    </div>
+
+    <div id="gameoverPage" class="page">
+      <h1>Game Over</h1>
+      <p id="finalScore">Score: 0</p>
+      <div class="btnRow">
+        <button class="mainbtn" id="restartBtn">Restart</button>
+        <button class="mainbtn secondary" id="upgradesBtn">Upgrades</button>
+        <button class="mainbtn secondary" id="menuFromGameoverBtn">Main Menu</button>
+      </div>
+    </div>
+
+    <div id="upgradesPage" class="page">
+      <h1>Upgrades</h1>
+      <div id="upgradesCurrency">Coins banked: 0</div>
+      <div class="upgradeCards">
+        <div class="card" id="capacityCard">
+          <h3>Laser Capacity</h3>
+          <div class="lvl" id="capacityLvl">Level 0 / 3</div>
+          <div class="effect" id="capacityEffect">Unlocks up to 3 lasers you can fire.</div>
+          <button id="capacityBuy">Buy</button>
+        </div>
+        <div class="card" id="refreshCard">
+          <h3>Laser Refresh Rate</h3>
+          <div class="lvl" id="refreshLvl">Level 0 / 4</div>
+          <div class="effect" id="refreshEffect">Reduces recharge time between lasers.</div>
+          <button id="refreshBuy">Buy</button>
+        </div>
+      </div>
+      <div class="btnRow">
+        <button class="mainbtn secondary" id="backBtn">Back</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function() {
+  const game = document.getElementById('game');
+  const squareEl = document.getElementById('square');
+  const scoreValEl = document.getElementById('scoreVal');
+  const coinsValEl = document.getElementById('coinsVal');
+  const timerValEl = document.getElementById('timerVal');
+  const laserRowEl = document.getElementById('laserRow');
+
+  const overlay = document.getElementById('overlay');
+  const pages = {
+    menu: document.getElementById('mainMenuPage'),
+    paused: document.getElementById('pausePage'),
+    gameover: document.getElementById('gameoverPage'),
+    upgrades: document.getElementById('upgradesPage')
+  };
+  const finalScoreEl = document.getElementById('finalScore');
+  const upgradesCurrencyEl = document.getElementById('upgradesCurrency');
+  const menuCoinsEl = document.getElementById('menuCoins');
+
+  const playBtn = document.getElementById('playBtn');
+  const upgradesFromMenuBtn = document.getElementById('upgradesFromMenuBtn');
+  const normalModeBtn = document.getElementById('normalModeBtn');
+  const hardModeBtn = document.getElementById('hardModeBtn');
+
+  const resumeBtn = document.getElementById('resumeBtn');
+  const upgradesFromPauseBtn = document.getElementById('upgradesFromPauseBtn');
+  const menuFromPauseBtn = document.getElementById('menuFromPauseBtn');
+
+  const restartBtn = document.getElementById('restartBtn');
+  const upgradesBtn = document.getElementById('upgradesBtn');
+  const menuFromGameoverBtn = document.getElementById('menuFromGameoverBtn');
+
+  const backBtn = document.getElementById('backBtn');
+  const capacityLvlEl = document.getElementById('capacityLvl');
+  const capacityEffectEl = document.getElementById('capacityEffect');
+  const capacityBuyBtn = document.getElementById('capacityBuy');
+  const refreshLvlEl = document.getElementById('refreshLvl');
+  const refreshEffectEl = document.getElementById('refreshEffect');
+  const refreshBuyBtn = document.getElementById('refreshBuy');
+
+  // ---------- constants ----------
+  const SQUARE_SIZE = 40;
+  const SQUARE_MAX_SPEED = 300;
+  const SQUARE_ACCEL = 1800;
+  const SQUARE_DECEL = 2200;
+
+  const CIRCLE_RADIUS = 8;
+  const CIRCLE_COUNT = 8;
+
+  const TRIANGLE_SIZE = 30;
+  const TRIANGLE_R = 14;
+  const TRIANGLE_BASE_SPEED = 100;      // constant hunting speed, regardless of player speed
+  const TRIANGLE_SPEEDUP_INTERVAL = 30; // seconds between speed increases
+  const TRIANGLE_SPEEDUP_AMOUNT = 15;   // px/s added per interval
+  const RETREAT_SPEED = 140;
+  const STILL_THRESHOLD = 3;
+  const BASE_TRIANGLE_TARGET = 5;
+  const KILL_SCORE = 10;
+
+  const LASER_SPEED = 650;
+
+  const MAX_CAPACITY = 3;
+  const MAX_REFRESH_LEVEL = 4;
+  const CAPACITY_COSTS = [10, 20, 30];
+  const REFRESH_COSTS = [20, 40, 60, 80];
+  const BASE_LASER_REFRESH = 3;
+  const REFRESH_STEP = 0.5;
+  const REFRESH_FLOOR = 1;
+
+  // ---------- persistent (survive restarts) ----------
+  let currency = 0;
+  let capacityLevel = 0;
+  let refreshLevel = 0;
+  let hardMode = false;
+
+  // ---------- run state ----------
+  let state = 'menu'; // 'menu' | 'playing' | 'paused' | 'gameover' | 'upgrades'
+  let upgradesReturnTo = 'menu';
+  let squareX, squareY;
+  let vel = { x: 0, y: 0 };
+  let facingDir = { x: 0, y: -1 };
+  let stillTimer = 0;
+  let isMoving = false;
+  let runTime = 0;
+
+  let score = 0;
+  let circles = [];
+  let triangles = [];
+  let lasers = [];
+  let spawnQueue = 0;
+  let spawnTimer = 0;
+
+  let currentCharge = 0;
+  let rechargeTimer = 0;
+
+  const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false };
+  const WASD_MAP = { w: 'ArrowUp', a: 'ArrowLeft', s: 'ArrowDown', d: 'ArrowRight' };
+  function normalizeKey(k) {
+    const lower = k.length === 1 ? k.toLowerCase() : k;
+    return WASD_MAP[lower] || k;
+  }
+
+  function rand(min, max) { return Math.random() * (max - min) + min; }
+  function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+  function moveToward(cur, target, maxDelta) {
+    if (cur < target) return Math.min(cur + maxDelta, target);
+    return Math.max(cur - maxDelta, target);
+  }
+  function currentRefreshRate() {
+    return Math.max(REFRESH_FLOOR, BASE_LASER_REFRESH - REFRESH_STEP * refreshLevel);
+  }
+
+  // ---------- square ----------
+  function resetSquare() {
+    squareX = window.innerWidth / 2 - SQUARE_SIZE / 2;
+    squareY = window.innerHeight / 2 - SQUARE_SIZE / 2;
+    vel = { x: 0, y: 0 };
+    facingDir = { x: 0, y: -1 };
+    squareEl.style.left = squareX + 'px';
+    squareEl.style.top = squareY + 'px';
+  }
+  function clampSquare() {
+    const maxX = window.innerWidth - SQUARE_SIZE;
+    const maxY = window.innerHeight - SQUARE_SIZE;
+    squareX = Math.max(0, Math.min(squareX, maxX));
+    squareY = Math.max(0, Math.min(squareY, maxY));
+  }
+  function squareCenter() { return { x: squareX + SQUARE_SIZE / 2, y: squareY + SQUARE_SIZE / 2 }; }
+
+  // ---------- circles ----------
+  function spawnCircle() {
+    const el = document.createElement('div');
+    el.className = 'circle';
+    game.appendChild(el);
+    const c = { el, x: 0, y: 0 };
+    placeCircle(c);
+    circles.push(c);
+  }
+  function placeCircle(c) {
+    c.x = rand(CIRCLE_RADIUS, window.innerWidth - CIRCLE_RADIUS * 2);
+    c.y = rand(CIRCLE_RADIUS, window.innerHeight - CIRCLE_RADIUS * 2);
+    c.el.style.left = c.x + 'px';
+    c.el.style.top = c.y + 'px';
+  }
+  function circleCollidesSquare(c) {
+    const cx = c.x + CIRCLE_RADIUS, cy = c.y + CIRCLE_RADIUS;
+    const closestX = Math.max(squareX, Math.min(cx, squareX + SQUARE_SIZE));
+    const closestY = Math.max(squareY, Math.min(cy, squareY + SQUARE_SIZE));
+    const dx = cx - closestX, dy = cy - closestY;
+    return (dx * dx + dy * dy) < (CIRCLE_RADIUS * CIRCLE_RADIUS);
+  }
+
+  // ---------- triangles ----------
+  function triangleTarget() { return BASE_TRIANGLE_TARGET + Math.floor(score / 10); }
+
+  function spawnTriangle() {
+    const el = document.createElement('div');
+    el.className = 'triangle';
+    const shape = document.createElement('div');
+    shape.className = 'triangle-shape';
+    el.appendChild(shape);
+    game.appendChild(el);
+
+    const edge = Math.floor(rand(0, 4));
+    let x, y;
+    if (edge === 0) { x = rand(0, window.innerWidth); y = -TRIANGLE_SIZE - 10; }
+    else if (edge === 1) { x = window.innerWidth + 10; y = rand(0, window.innerHeight); }
+    else if (edge === 2) { x = rand(0, window.innerWidth); y = window.innerHeight + 10; }
+    else { x = -TRIANGLE_SIZE - 10; y = rand(0, window.innerHeight); }
+
+    triangles.push({ el, x, y, angle: 0, tstate: 'hunting' });
+  }
+  function triangleCenter(t) { return { x: t.x + TRIANGLE_SIZE / 2, y: t.y + TRIANGLE_SIZE / 2 }; }
+  function updateTriangleTransform(t) {
+    t.el.style.left = t.x + 'px';
+    t.el.style.top = t.y + 'px';
+    t.el.style.transform = 'rotate(' + t.angle + 'deg)';
+  }
+  function triangleCollidesSquare(t) {
+    const tc = triangleCenter(t), sc = squareCenter();
+    const dist = Math.hypot(tc.x - sc.x, tc.y - sc.y);
+    return dist < (TRIANGLE_R + SQUARE_SIZE / 2);
+  }
+  function isOffscreen(t) {
+    return t.x < -TRIANGLE_SIZE - 20 || t.x > window.innerWidth + 20 ||
+           t.y < -TRIANGLE_SIZE - 20 || t.y > window.innerHeight + 20;
+  }
+
+  function updateTriangles(dt) {
+    const sc = squareCenter();
+    const huntSpeed = TRIANGLE_BASE_SPEED + Math.floor(runTime / TRIANGLE_SPEEDUP_INTERVAL) * TRIANGLE_SPEEDUP_AMOUNT;
+
+    for (let i = triangles.length - 1; i >= 0; i--) {
+      const t = triangles[i];
+      const tc = triangleCenter(t);
+      const vx = sc.x - tc.x, vy = sc.y - tc.y;
+      const distToSquare = Math.hypot(vx, vy) || 1;
+
+      if (t.tstate === 'hunting') {
+        if (stillTimer >= STILL_THRESHOLD) {
+          t.tstate = 'retreating';
+        } else {
+          t.angle = Math.atan2(vx, -vy) * 180 / Math.PI;
+          const nx = vx / distToSquare, ny = vy / distToSquare;
+          t.x += nx * huntSpeed * dt;
+          t.y += ny * huntSpeed * dt;
+        }
+      } else if (t.tstate === 'retreating') {
+        t.angle = Math.atan2(-vx, vy) * 180 / Math.PI;
+        const nx = -vx / distToSquare, ny = -vy / distToSquare;
+        t.x += nx * RETREAT_SPEED * dt;
+        t.y += ny * RETREAT_SPEED * dt;
+        if (isOffscreen(t)) {
+          t.el.remove();
+          triangles.splice(i, 1);
+          continue;
+        }
+      }
+    }
+
+    // triangle-triangle separation
+    for (let i = 0; i < triangles.length; i++) {
+      for (let j = i + 1; j < triangles.length; j++) {
+        const a = triangles[i], b = triangles[j];
+        const ac = triangleCenter(a), bc = triangleCenter(b);
+        const dx = bc.x - ac.x, dy = bc.y - ac.y;
+        const dist = Math.hypot(dx, dy) || 0.01;
+        const minDist = TRIANGLE_R * 2;
+        if (dist < minDist) {
+          const overlap = (minDist - dist) / 2;
+          const nx = dx / dist, ny = dy / dist;
+          a.x -= nx * overlap; a.y -= ny * overlap;
+          b.x += nx * overlap; b.y += ny * overlap;
+        }
+      }
+    }
+
+    for (let i = triangles.length - 1; i >= 0; i--) {
+      const t = triangles[i];
+      updateTriangleTransform(t);
+      if (triangleCollidesSquare(t)) { gameOver(); return; }
+    }
+  }
+
+  // ---------- lasers ----------
+  function nearestTriangle() {
+    if (triangles.length === 0) return null;
+    const sc = squareCenter();
+    let best = null, bestDist = Infinity;
+    for (const t of triangles) {
+      const tc = triangleCenter(t);
+      const d = Math.hypot(tc.x - sc.x, tc.y - sc.y);
+      if (d < bestDist) { bestDist = d; best = t; }
+    }
+    return best;
+  }
+
+  function fireLaser() {
+    if (state !== 'playing' || currentCharge <= 0) return;
+    currentCharge--;
+    updateLaserPips();
+    const sc = squareCenter();
+
+    let dir = facingDir;
+    const target = nearestTriangle();
+    if (target) {
+      const tc = triangleCenter(target);
+      const dx = tc.x - sc.x, dy = tc.y - sc.y;
+      const len = Math.hypot(dx, dy) || 1;
+      dir = { x: dx / len, y: dy / len };
+    }
+
+    const el = document.createElement('div');
+    el.className = 'laser';
+    game.appendChild(el);
+    const angleDeg = Math.atan2(dir.x, -dir.y) * 180 / Math.PI;
+    lasers.push({
+      el,
+      x: sc.x - 2 + dir.x * 22,
+      y: sc.y - 9 + dir.y * 22,
+      dx: dir.x, dy: dir.y, angle: angleDeg
+    });
+  }
+  function updateLasers(dt) {
+    for (let i = lasers.length - 1; i >= 0; i--) {
+      const l = lasers[i];
+      l.x += l.dx * LASER_SPEED * dt;
+      l.y += l.dy * LASER_SPEED * dt;
+      l.el.style.left = l.x + 'px';
+      l.el.style.top = l.y + 'px';
+      l.el.style.transform = 'rotate(' + l.angle + 'deg)';
+
+      let hit = false;
+      for (let j = triangles.length - 1; j >= 0; j--) {
+        const t = triangles[j];
+        const tc = triangleCenter(t);
+        if (Math.hypot(tc.x - l.x, tc.y - l.y) < TRIANGLE_R + 6) {
+          t.el.remove();
+          triangles.splice(j, 1);
+          score += KILL_SCORE;
+          scoreValEl.textContent = score;
+          hit = true;
+          break;
+        }
+      }
+      if (hit || l.x < -30 || l.x > window.innerWidth + 30 || l.y < -30 || l.y > window.innerHeight + 30) {
+        l.el.remove();
+        lasers.splice(i, 1);
+      }
+    }
+  }
+
+  // ---------- laser pips UI ----------
+  function rebuildLaserPips() {
+    laserRowEl.innerHTML = '';
+    for (let i = 0; i < capacityLevel; i++) {
+      const pip = document.createElement('div');
+      pip.className = 'pip';
+      laserRowEl.appendChild(pip);
+    }
+    updateLaserPips();
+  }
+  function updateLaserPips() {
+    const pips = laserRowEl.children;
+    for (let i = 0; i < pips.length; i++) {
+      pips[i].classList.toggle('filled', i < currentCharge);
+    }
+  }
+
+  // ---------- input ----------
+  window.addEventListener('keydown', (e) => {
+    const key = normalizeKey(e.key);
+    if (key in keys) { keys[key] = true; e.preventDefault(); }
+    else if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) fireLaser(); }
+    else if (e.key === 'Escape') {
+      e.preventDefault();
+      if (state === 'playing') pauseGame();
+      else if (state === 'paused') resumeGame();
+    }
+  });
+  window.addEventListener('keyup', (e) => {
+    const key = normalizeKey(e.key);
+    if (key in keys) { keys[key] = false; e.preventDefault(); }
+  });
+  window.addEventListener('resize', () => { clampSquare(); });
+
+  // ---------- navigation ----------
+  function showPage(name) {
+    Object.values(pages).forEach(p => p.style.display = 'none');
+    pages[name].style.display = 'flex';
+    overlay.style.display = 'flex';
+  }
+  function hideOverlay() { overlay.style.display = 'none'; }
+
+  function goToUpgrades(fromState) {
+    upgradesReturnTo = fromState;
+    state = 'upgrades';
+    refreshUpgradesUI();
+    showPage('upgrades');
+  }
+
+  playBtn.addEventListener('click', () => { startNewRun(); });
+  upgradesFromMenuBtn.addEventListener('click', () => goToUpgrades('menu'));
+  normalModeBtn.addEventListener('click', () => { hardMode = false; updateDifficultyUI(); });
+  hardModeBtn.addEventListener('click', () => { hardMode = true; updateDifficultyUI(); });
+
+  resumeBtn.addEventListener('click', () => resumeGame());
+  upgradesFromPauseBtn.addEventListener('click', () => goToUpgrades('paused'));
+  menuFromPauseBtn.addEventListener('click', () => goToMenu());
+
+  restartBtn.addEventListener('click', () => { startNewRun(); });
+  upgradesBtn.addEventListener('click', () => goToUpgrades('gameover'));
+  menuFromGameoverBtn.addEventListener('click', () => goToMenu());
+
+  backBtn.addEventListener('click', () => {
+    state = upgradesReturnTo;
+    if (state === 'menu') { updateMenuUI(); showPage('menu'); }
+    else if (state === 'paused') showPage('paused');
+    else if (state === 'gameover') showPage('gameover');
+  });
+  capacityBuyBtn.addEventListener('click', buyCapacity);
+  refreshBuyBtn.addEventListener('click', buyRefresh);
+
+  function pauseGame() {
+    state = 'paused';
+    showPage('paused');
+  }
+  function resumeGame() {
+    state = 'playing';
+    hideOverlay();
+    lastTime = performance.now();
+  }
+  function goToMenu() {
+    state = 'menu';
+    updateMenuUI();
+    showPage('menu');
+  }
+  function updateMenuUI() {
+    menuCoinsEl.textContent = currency;
+    updateDifficultyUI();
+  }
+  function updateDifficultyUI() {
+    normalModeBtn.classList.toggle('active', !hardMode);
+    hardModeBtn.classList.toggle('active', hardMode);
+  }
+
+  // ---------- upgrades ----------
+  function buyCapacity() {
+    if (capacityLevel >= MAX_CAPACITY) return;
+    const cost = CAPACITY_COSTS[capacityLevel];
+    if (currency < cost) return;
+    currency -= cost;
+    capacityLevel++;
+    refreshUpgradesUI();
+  }
+  function buyRefresh() {
+    if (capacityLevel <= 0 || refreshLevel >= MAX_REFRESH_LEVEL) return;
+    const cost = REFRESH_COSTS[refreshLevel];
+    if (currency < cost) return;
+    currency -= cost;
+    refreshLevel++;
+    refreshUpgradesUI();
+  }
+  function refreshUpgradesUI() {
+    upgradesCurrencyEl.textContent = 'Coins banked: ' + currency;
+    coinsValEl.textContent = currency;
+
+    capacityLvlEl.textContent = 'Level ' + capacityLevel + ' / ' + MAX_CAPACITY;
+    capacityEffectEl.textContent = capacityLevel + ' laser' + (capacityLevel === 1 ? '' : 's') + ' available at once.';
+    if (capacityLevel >= MAX_CAPACITY) {
+      capacityBuyBtn.textContent = 'MAX'; capacityBuyBtn.disabled = true;
+    } else {
+      capacityBuyBtn.textContent = 'Buy (' + CAPACITY_COSTS[capacityLevel] + ')';
+      capacityBuyBtn.disabled = currency < CAPACITY_COSTS[capacityLevel];
+    }
+
+    refreshLvlEl.textContent = 'Level ' + refreshLevel + ' / ' + MAX_REFRESH_LEVEL;
+    refreshEffectEl.textContent = capacityLevel <= 0
+      ? 'Requires Laser Capacity first.'
+      : 'Refresh: ' + currentRefreshRate().toFixed(1) + 's per laser.';
+    if (capacityLevel <= 0) {
+      refreshBuyBtn.textContent = 'Locked'; refreshBuyBtn.disabled = true;
+    } else if (refreshLevel >= MAX_REFRESH_LEVEL) {
+      refreshBuyBtn.textContent = 'MAX'; refreshBuyBtn.disabled = true;
+    } else {
+      refreshBuyBtn.textContent = 'Buy (' + REFRESH_COSTS[refreshLevel] + ')';
+      refreshBuyBtn.disabled = currency < REFRESH_COSTS[refreshLevel];
+    }
+  }
+
+  // ---------- game over / reset ----------
+  function gameOver() {
+    state = 'gameover';
+    finalScoreEl.textContent = 'Score: ' + score;
+    showPage('gameover');
+  }
+
+  function startNewRun() {
+    circles.forEach(c => c.el.remove()); circles = [];
+    triangles.forEach(t => t.el.remove()); triangles = [];
+    lasers.forEach(l => l.el.remove()); lasers = [];
+
+    if (hardMode) currency = 0;
+
+    score = 0;
+    scoreValEl.textContent = '0';
+    coinsValEl.textContent = currency;
+    stillTimer = 0;
+    runTime = 0;
+    timerValEl.textContent = '0s';
+    spawnQueue = triangleTarget();
+    spawnTimer = rand(0.5, 0.7);
+
+    currentCharge = capacityLevel;
+    rechargeTimer = currentRefreshRate();
+    rebuildLaserPips();
+
+    resetSquare();
+    for (let i = 0; i < CIRCLE_COUNT; i++) spawnCircle();
+
+    hideOverlay();
+    state = 'playing';
+    lastTime = performance.now();
+  }
+
+  // ---------- main loop ----------
+  let lastTime = performance.now();
+
+  function tick(now) {
+    const dt = Math.min((now - lastTime) / 1000, 0.05);
+    lastTime = now;
+
+    if (state === 'playing') {
+      let dx = 0, dy = 0;
+      if (keys.ArrowUp) dy -= 1;
+      if (keys.ArrowDown) dy += 1;
+      if (keys.ArrowLeft) dx -= 1;
+      if (keys.ArrowRight) dx += 1;
+      isMoving = (dx !== 0 || dy !== 0);
+
+      let targetVx = 0, targetVy = 0;
+      if (isMoving) {
+        const len = Math.hypot(dx, dy);
+        targetVx = (dx / len) * SQUARE_MAX_SPEED;
+        targetVy = (dy / len) * SQUARE_MAX_SPEED;
+        facingDir = { x: dx / len, y: dy / len };
+        stillTimer = 0;
+      } else {
+        stillTimer += dt;
+      }
+      const accel = isMoving ? SQUARE_ACCEL : SQUARE_DECEL;
+      vel.x = moveToward(vel.x, targetVx, accel * dt);
+      vel.y = moveToward(vel.y, targetVy, accel * dt);
+
+      squareX += vel.x * dt;
+      squareY += vel.y * dt;
+      clampSquare();
+      squareEl.style.left = squareX + 'px';
+      squareEl.style.top = squareY + 'px';
+
+      runTime += dt;
+      timerValEl.textContent = Math.floor(runTime) + 's';
+
+      // circles
+      for (let i = circles.length - 1; i >= 0; i--) {
+        const c = circles[i];
+        if (circleCollidesSquare(c)) {
+          score++; currency++;
+          scoreValEl.textContent = score;
+          coinsValEl.textContent = currency;
+          placeCircle(c);
+        }
+      }
+
+      updateLasers(dt);
+
+      if (capacityLevel > 0 && currentCharge < capacityLevel) {
+        rechargeTimer -= dt;
+        if (rechargeTimer <= 0) {
+          currentCharge++;
+          rechargeTimer = currentRefreshRate();
+          updateLaserPips();
+        }
+      }
+
+      updateTriangles(dt);
+
+      if (state === 'playing') {
+        const desired = triangleTarget() - triangles.length - spawnQueue;
+        if (desired > 0) spawnQueue += desired;
+        if (spawnQueue > 0) {
+          spawnTimer -= dt;
+          if (spawnTimer <= 0) {
+            spawnTriangle();
+            spawnQueue--;
+            spawnTimer = rand(0.5, 0.7);
+          }
+        }
+      }
+    }
+
+    requestAnimationFrame(tick);
+  }
+
+  // ---------- init ----------
+  resetSquare();
+  for (let i = 0; i < CIRCLE_COUNT; i++) spawnCircle();
+  rebuildLaserPips();
+  coinsValEl.textContent = currency;
+  updateMenuUI();
+  showPage('menu');
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
